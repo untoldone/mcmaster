@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"time"
 	"fmt"
+	"strings"
+	"encoding/base64"
 	"github.com/gorilla/websocket"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/JoshuaDoes/go-yggdrasil"
 )
 
 type Service struct {
@@ -74,6 +77,28 @@ func connect(w http.ResponseWriter, r *http.Request) {
 var hmacSampleSecret = []byte("my_secret_key")
 
 func auth(w http.ResponseWriter, r *http.Request) {
+	auth := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
+
+  if len(auth) != 2 || auth[0] != "Basic" {
+      http.Error(w, "authorization failed", http.StatusUnauthorized)
+      return
+  }
+
+	payload, _ := base64.StdEncoding.DecodeString(auth[1])
+  pair := strings.SplitN(string(payload), ":", 2)
+
+  if len(pair) != 2 {
+      http.Error(w, "authorization failed", http.StatusUnauthorized)
+      return
+  }
+
+	yggdrasilClient := &yggdrasil.Client{ClientToken: "your client token here"}
+	_, yErr := yggdrasilClient.Authenticate(pair[0], pair[1], "Minecraft", 1)
+	if yErr != nil {
+		http.Error(w, fmt.Sprintf("authorization failed: %s", yErr), http.StatusUnauthorized)
+		return
+	}
+
 	// Create a new token object, specifying signing method and the claims
 	// you would like it to contain.
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
