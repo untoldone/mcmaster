@@ -6,6 +6,7 @@ import (
 	"time"
 	"fmt"
 	"strings"
+	"encoding/json"
 	"encoding/base64"
 	"github.com/gorilla/websocket"
 	"github.com/dgrijalva/jwt-go"
@@ -44,7 +45,74 @@ var serviceContext = ServiceContext{
 	OutboundMessage: make(chan string),
 }
 
-var activeConnections = []*websocket.Conn{}
+type ActiveConnection struct {
+	Connection *websocket.Conn
+	AuthenticatedUser string
+}
+
+var activeConnections = []*ActiveConnection{}
+
+// Inbound from client
+type WSCommand struct {
+	Command string `json:"command"`
+	Params *json.RawMessage `json:"params"`
+}
+
+type WSAuthenticateParams struct {
+	Token string `json:"token"`
+}
+
+type WSSendToTerminalParams struct {
+	Text string `json:"text"`
+}
+
+type WSTerminalStdoutedBody struct {
+	Text string `json:"text"`
+}
+
+type WSTerminalStderroredBody struct {
+	Text string `json:"text"`
+}
+
+// Inform client of something happening server side
+type WSAction struct {
+	Action string `json:"action"`
+	Body interface{} `json:"body"`
+}
+
+func processInboundMessage(ac *ActiveConnection, message []byte) {
+	var genericCommand WSCommand
+	err := json.Unmarshal(message, &genericCommand)
+	if err != nil {
+		fmt.Println("ERR", err)
+	}
+
+	fmt.Println(genericCommand)
+
+	switch genericCommand.Command {
+	case "Authenticate":
+		var authParams WSAuthenticateParams
+		if parseErr := json.Unmarshal(*genericCommand.Params, &authParams); parseErr != nil {
+			fmt.Println("Parse error", parseErr)
+			return
+		}
+
+		fmt.Println(authParams.Token)
+		ac.AuthenticatedUser = validateJwt(authParams.Token)
+	case "SendToTerminal":
+		var termParams WSSendToTerminalParams
+		if parseErr := json.Unmarshal(*genericCommand.Params, &termParams); parseErr != nil {
+			fmt.Println("Parse error", parseErr)
+			return
+		}
+
+		fmt.Println(ac.AuthenticatedUser)
+		if ac.AuthenticatedUser != "" {
+			fmt.Println(termParams.Text)
+			serviceContext.InboundMessage <- string(termParams.Text)
+		}
+	}
+}
 
 func connect(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
@@ -54,7 +122,9 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close()
 
-	activeConnections = append(activeConnections, c)
+	ac := ActiveConnection{ Connection: c }
+	activeConnections = append(activeConnections, &ac)
+
 	for {
 		mt, message, err := c.ReadMessage()
 		if err != nil {
@@ -63,20 +133,32 @@ func connect(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("recv: %s", message)
 		if mt == websocket.TextMessage {
-			serviceContext.InboundMessage <- string(message)
+			processInboundMessage(&ac, message)
 		}
-
-		/*err = c.WriteMessage(mt, message)
-		if err != nil {
-			log.Println("write:", err)
-			break
-		}*/
 	}
 }
 
 var hmacSampleSecret = []byte("my_secret_key")
 
+func addCorsHeader(res http.ResponseWriter) {
+  headers := res.Header()
+  headers.Add("Access-Control-Allow-Origin", "*")
+  headers.Add("Vary", "Origin")
+  headers.Add("Vary", "Access-Control-Request-Method")
+  headers.Add("Access-Control-Allow-Credentials", "true")
+  headers.Add("Vary", "Access-Control-Request-Headers")
+  headers.Add("Access-Control-Allow-Headers", "Content-Type, Origin, Accept, token,Authorization")
+  headers.Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+}
+
 func auth(w http.ResponseWriter, r *http.Request) {
+	addCorsHeader(w)
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+    return
+	}
+
 	auth := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
 
   if len(auth) != 2 || auth[0] != "Basic" {
@@ -102,6 +184,7 @@ func auth(w http.ResponseWriter, r *http.Request) {
 	// Create a new token object, specifying signing method and the claims
 	// you would like it to contain.
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user": pair[0],
   	"exp": time.Now().UTC().Add(time.Hour * 1).Unix(),
 	})
 
@@ -111,30 +194,35 @@ func auth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 	}
 
+	headers := w.Header()
+
 	fmt.Fprintf(w, tokenString)
 }
 
-func validateJwt(tokenString string) bool {
+// Returns username claim if valid or empty string if invalid
+func validateJwt(tokenString string) string {
 	// Parse takes the token string and a function for looking up the key. The latter is especially
 	// useful if you use multiple keys for your application.  The standard is to use 'kid' in the
 	// head of the token to identify which key to use, but the parsed token (head and claims) is provided
 	// to the callback, providing flexibility.
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-	    // Don't forget to validate the alg is what you expect:
-	    if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-	        return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-	    }
+    // Don't forget to validate the alg is what you expect:
+    if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+      return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+    }
 
-	    // hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
-	    return hmacSampleSecret, nil
+    // hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+    return hmacSampleSecret, nil
 	})
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-	    fmt.Println(claims["foo"], claims["nbf"])
-	    return true
+		fmt.Println(claims["exp"])
+		fmt.Println(claims["user"], claims["user"].(string))
+
+		return claims["user"].(string)
 	} else {
-	    fmt.Println(err)
-	    return false
+		fmt.Println("auth error", err)
+		return ""
 	}
 }
 
@@ -149,9 +237,11 @@ func (l *Service) Run(addr string) (ServiceContext) {
 	go func(){
 		for outboundMessage := range serviceContext.OutboundMessage {
 			for _, c := range activeConnections {
-				err := c.WriteMessage(websocket.TextMessage, []byte(outboundMessage))
-				if err != nil {
-					log.Println("write err:", err)
+				if c.AuthenticatedUser != "" {
+					err := c.Connection.WriteMessage(websocket.TextMessage, []byte(outboundMessage))
+					if err != nil {
+						log.Println("write err:", err)
+					}
 				}
 			}
 		}

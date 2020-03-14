@@ -1,12 +1,11 @@
 TODO:
-* Authenticate validates user against Minecraft
-* Authenticate saves context on user in jwt
-* Authenticate ws client
-* Switch ws to publish console events as json after authentication
-* Switch sending console stdin to be a command
-* Add authenticate UX + disallow unauthenticated users at authenticated areas
+* General code cleanup
 
-* Concept of access control? OP vs non OP?
+* Pull out env variables for secrets (jwt + minecraft client id)
+* invalid auth messages
+* Concept of access control? OP vs non OP? Whitelist? seperate?
+
+* Handle CORS better in dev vs prod?
 
 * Merge mcnotify code into mcmaster
 

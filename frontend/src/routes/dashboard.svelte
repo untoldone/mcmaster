@@ -2,18 +2,23 @@
   let websocket;
   let command = "";
   let log = "";
+  let token = window.localStorage.getItem("token");
 
   function sendCommand() {
     if (process.browser) {
-      websocket.send(command);
+      websocket.send(`{"command": "SendToTerminal", "params": { "text": "${command}"}}`);
       command = "";
     }
   }
 
   function onMessage(evt) {
-    log += evt.data + "\n";
-    let objDiv = document.getElementById("end-of-log");
-    objDiv.scrollIntoView(false);
+    let inbound = JSON.parse(evt.data)
+
+    if (inbound.action === "TerminalStdouted" || inbound.acount === "TerminalErrored") {
+      log += inbound.body.text + "\n";
+      let objDiv = document.getElementById("end-of-log");
+      objDiv.scrollIntoView(false);
+    }
   }
 
   function onCommandKeyDown(evt) {
@@ -25,7 +30,9 @@
 
   if (process.browser) {
     websocket = new WebSocket("ws://localhost:5000/ws");
-    //websocket.onopen = function(evt) { onOpen(evt) };
+    websocket.onopen = function(evt) {
+      websocket.send(`{"command": "Authenticate", "params": { "token": "${token}"}}`);
+    };
     //websocket.onclose = function(evt) { onClose(evt) };
     websocket.onmessage = function(evt) { onMessage(evt) };
     //websocket.onerror = function(evt) { onError(evt) };

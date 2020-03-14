@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"log"
+	"encoding/json"
+	"fmt"
 	//"net/http"
 	//"github.com/gorilla/websocket"
 	//"github.com/untoldone/mcmaster/backend/service"
@@ -25,10 +27,36 @@ func main() {
 		select {
 		case processMessage := <-launcherContext.Stdout:
 		  log.Println("stdout received", processMessage)
-		  serviceContext.OutboundMessage <- processMessage
+
+		  outboundMessage := WSAction{
+		  	Action: "TerminalStdouted",
+		  	Body: WSTerminalStdoutedBody{
+		  		Text: processMessage,
+		  	},
+		  }
+
+		  bytes, err := json.Marshal(outboundMessage)
+	    if err != nil {
+	        fmt.Println("Can't serislize", outboundMessage)
+	    }
+
+		  serviceContext.OutboundMessage <- string(bytes)
 		case processError := <-launcherContext.Stderr:
 		  log.Println("stderr received", processError)
-		  serviceContext.OutboundMessage <- processError
+
+		  outboundMessage := WSAction{
+		  	Action: "TerminalStderrored",
+		  	Body: WSTerminalStderroredBody{
+		  		Text: processError,
+		  	},
+		  }
+
+		  bytes, err := json.Marshal(outboundMessage)
+	    if err != nil {
+	        fmt.Println("Can't serislize", outboundMessage)
+	    }
+
+		  serviceContext.OutboundMessage <- string(bytes)
 		case inbound := <-serviceContext.InboundMessage:
 		  log.Println("inbound message", inbound)
 		  launcherContext.Stdin <- inbound
