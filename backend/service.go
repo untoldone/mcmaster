@@ -194,8 +194,6 @@ func auth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 	}
 
-	headers := w.Header()
-
 	fmt.Fprintf(w, tokenString)
 }
 

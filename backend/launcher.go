@@ -7,6 +7,9 @@ import (
 	"os/exec"
 	//"os"
 	"bufio"
+	"net/http"
+	"os"
+	"io/ioutil"
 )
 
 type Launcher struct {
@@ -19,16 +22,77 @@ type LauncherContext struct {
 	Stdin chan string	
 }
 
+var latestMinecraftUrl = "https://launcher.mojang.com/v1/objects/bb2b6b1aefcd70dfd1892149ac3a215f6c636b07/server.jar"
+
+// From https://golangcode.com/download-a-file-from-a-url/
+// DownloadFile will download a url to a local file. It's efficient because it will
+// write as it downloads and not load the whole file into memory.
+func downloadFile(filepath string, url string) error {
+    // Get the data
+    resp, err := http.Get(url)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    // Create the file
+    out, err := os.Create(filepath)
+    if err != nil {
+        return err
+    }
+    defer out.Close()
+
+    // Write the body to file
+    _, err = io.Copy(out, resp.Body)
+    return err
+}
+
+// From https://golangcode.com/check-if-a-file-exists/
+// fileExists checks if a file exists and is not a directory before we
+// try using it to prevent further errors.
+func fileExists(filename string) bool {
+    info, err := os.Stat(filename)
+    if os.IsNotExist(err) {
+        return false
+    }
+    return !info.IsDir()
+}
+
 func (l *Launcher) Run() (LauncherContext) {
+	serverPath := "tmp"
+	jarPath := fmt.Sprintf("%s/%s", serverPath, "server.jar")
+	eulaPath := fmt.Sprintf("%s/%s", serverPath, "eula.txt")
+
+	// Does folder exist?
+	if _, err := os.Stat(serverPath); os.IsNotExist(err) {
+		err := os.Mkdir("tmp", 0755)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	if !fileExists(jarPath) {
+		dErr := downloadFile(jarPath, latestMinecraftUrl)
+		if dErr != nil {
+			fmt.Println(dErr)
+		}
+	}
+
+	if !fileExists(eulaPath) {
+		eErr := ioutil.WriteFile(eulaPath, []byte("eula=true"), 0644)
+		if eErr != nil {
+			fmt.Println(eErr)
+		}
+	}
+
 	cmd := exec.Command("/usr/bin/java", "-Xmx1024M", "-Xms1024M", "-jar", "server.jar", "nogui")
+	cmd.Dir = "tmp"
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		fmt.Println("one")
 		log.Fatal(err)
 	}
-
-	cmd.Dir = "/Users/untoldone/Downloads/tmp"
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {

@@ -20,7 +20,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cmd.Dir = "/Users/untoldone/Downloads/tmp"
+	cmd.Dir = "tmp"
 
 	go func() {
 		defer stdin.Close()
