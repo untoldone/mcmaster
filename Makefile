@@ -1,6 +1,6 @@
 build: deps
 	mkdir -p build
-	cd backend; go build -o build/mcmaster .
+	cd backend; go build -o ../build/mcmaster-backend .
 	cd frontend; yarn build
 
 deps:
