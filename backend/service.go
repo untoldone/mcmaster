@@ -1,25 +1,33 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
-	"time"
-	"fmt"
+	"os"
 	"strings"
-	"encoding/json"
-	"encoding/base64"
-	"github.com/gorilla/websocket"
-	"github.com/dgrijalva/jwt-go"
+	"time"
+
 	"github.com/JoshuaDoes/go-yggdrasil"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/gorilla/websocket"
 )
 
 type Service struct {
-	
 }
 
 type ServiceContext struct {
-	InboundMessage chan string
+	InboundMessage  chan string
 	OutboundMessage chan string
+}
+
+var whitelistedUsers []string
+
+func init() {
+	whitelist := os.Getenv("USER_WHITELIST")
+	whitelistedUsers = strings.Split(strings.ToLower(whitelist), ",")
 }
 
 // checkSameOrigin returns true if the origin is not set or is equal to the request host.
@@ -41,12 +49,12 @@ var upgrader = websocket.Upgrader{
 } // use default options
 
 var serviceContext = ServiceContext{
-	InboundMessage: make(chan string),
+	InboundMessage:  make(chan string),
 	OutboundMessage: make(chan string),
 }
 
 type ActiveConnection struct {
-	Connection *websocket.Conn
+	Connection        *websocket.Conn
 	AuthenticatedUser string
 }
 
@@ -54,8 +62,8 @@ var activeConnections = []*ActiveConnection{}
 
 // Inbound from client
 type WSCommand struct {
-	Command string `json:"command"`
-	Params *json.RawMessage `json:"params"`
+	Command string           `json:"command"`
+	Params  *json.RawMessage `json:"params"`
 }
 
 type WSAuthenticateParams struct {
@@ -76,8 +84,8 @@ type WSTerminalStderroredBody struct {
 
 // Inform client of something happening server side
 type WSAction struct {
-	Action string `json:"action"`
-	Body interface{} `json:"body"`
+	Action string      `json:"action"`
+	Body   interface{} `json:"body"`
 }
 
 func processInboundMessage(ac *ActiveConnection, message []byte) {
@@ -122,7 +130,7 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close()
 
-	ac := ActiveConnection{ Connection: c }
+	ac := ActiveConnection{Connection: c}
 	activeConnections = append(activeConnections, &ac)
 
 	for {
@@ -141,14 +149,14 @@ func connect(w http.ResponseWriter, r *http.Request) {
 var hmacSampleSecret = []byte("my_secret_key")
 
 func addCorsHeader(res http.ResponseWriter) {
-  headers := res.Header()
-  headers.Add("Access-Control-Allow-Origin", "*")
-  headers.Add("Vary", "Origin")
-  headers.Add("Vary", "Access-Control-Request-Method")
-  headers.Add("Access-Control-Allow-Credentials", "true")
-  headers.Add("Vary", "Access-Control-Request-Headers")
-  headers.Add("Access-Control-Allow-Headers", "Content-Type, Origin, Accept, token,Authorization")
-  headers.Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+	headers := res.Header()
+	headers.Add("Access-Control-Allow-Origin", "*")
+	headers.Add("Vary", "Origin")
+	headers.Add("Vary", "Access-Control-Request-Method")
+	headers.Add("Access-Control-Allow-Credentials", "true")
+	headers.Add("Vary", "Access-Control-Request-Headers")
+	headers.Add("Access-Control-Allow-Headers", "Content-Type, Origin, Accept, token,Authorization")
+	headers.Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
 }
 
 func auth(w http.ResponseWriter, r *http.Request) {
@@ -156,27 +164,40 @@ func auth(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
-    return
+		return
 	}
 
 	auth := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
 
-  if len(auth) != 2 || auth[0] != "Basic" {
-      http.Error(w, "authorization failed", http.StatusUnauthorized)
-      return
-  }
+	if len(auth) != 2 || auth[0] != "Basic" {
+		http.Error(w, "authorization failed", http.StatusUnauthorized)
+		return
+	}
 
 	payload, _ := base64.StdEncoding.DecodeString(auth[1])
-  pair := strings.SplitN(string(payload), ":", 2)
+	pair := strings.SplitN(string(payload), ":", 2)
 
-  if len(pair) != 2 {
-      http.Error(w, "authorization failed", http.StatusUnauthorized)
-      return
-  }
+	if len(pair) != 2 {
+		http.Error(w, "authorization failed", http.StatusUnauthorized)
+		return
+	}
 
+	// Check minecraft username / password
 	yggdrasilClient := &yggdrasil.Client{ClientToken: "your client token here"}
 	_, yErr := yggdrasilClient.Authenticate(pair[0], pair[1], "Minecraft", 1)
 	if yErr != nil {
+		http.Error(w, fmt.Sprintf("authorization failed: %s", yErr), http.StatusUnauthorized)
+		return
+	}
+
+	// Check user in whitelist
+	whitelisted := false
+	for _, whitelistedUser := range whitelistedUsers {
+		if whitelistedUser == strings.ToLower(pair[0]) {
+			whitelisted = true
+		}
+	}
+	if !whitelisted {
 		http.Error(w, fmt.Sprintf("authorization failed: %s", yErr), http.StatusUnauthorized)
 		return
 	}
@@ -185,7 +206,7 @@ func auth(w http.ResponseWriter, r *http.Request) {
 	// you would like it to contain.
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": pair[0],
-  	"exp": time.Now().UTC().Add(time.Hour * 1).Unix(),
+		"exp":  time.Now().UTC().Add(time.Hour * 1).Unix(),
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
@@ -204,13 +225,13 @@ func validateJwt(tokenString string) string {
 	// head of the token to identify which key to use, but the parsed token (head and claims) is provided
 	// to the callback, providing flexibility.
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-    // Don't forget to validate the alg is what you expect:
-    if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-      return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-    }
+		// Don't forget to validate the alg is what you expect:
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
 
-    // hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
-    return hmacSampleSecret, nil
+		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+		return hmacSampleSecret, nil
 	})
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
@@ -224,15 +245,15 @@ func validateJwt(tokenString string) string {
 	}
 }
 
-func (l *Service) Run(addr string) (ServiceContext) {
+func (l *Service) Run(addr string) ServiceContext {
 	http.HandleFunc("/ws", connect)
 	http.HandleFunc("/auth", auth)
 
-	go func(){
+	go func() {
 		log.Fatal(http.ListenAndServe(addr, nil))
 	}()
 
-	go func(){
+	go func() {
 		for outboundMessage := range serviceContext.OutboundMessage {
 			for _, c := range activeConnections {
 				if c.AuthenticatedUser != "" {

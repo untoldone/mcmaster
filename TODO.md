@@ -1,7 +1,11 @@
 TODO:
-* General code cleanup
+* Whitelist
+* Make deployable
 
 * Pull out env variables for secrets (jwt + minecraft client id)
+
+* General code cleanup
+
 * invalid auth messages
 * ws connection management seperated from single page in frontend
 * Concept of access control? OP vs non OP? Whitelist? seperate?

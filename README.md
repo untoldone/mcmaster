@@ -17,4 +17,8 @@ To just install dependencies:
 
     make deps
 
+Configuration:
 
+Set environment variables to configure McMaster.
+
+* USER_WHITELIST: Comma delimited list of minecraft email addresses allowed to log in

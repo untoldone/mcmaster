@@ -251,6 +251,7 @@ export default class McMasterSocket {
     // No-op
   }
 
+  // TODO: Base this on something else? Like a ping?
   _healthCheck() {
     if(this._someUnhealthyPendingMessages()) {
       this._sockTeardown();
