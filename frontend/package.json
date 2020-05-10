@@ -5,7 +5,7 @@
   "scripts": {
     "watch:tailwind": "postcss static/tailwind.css -o static/index.css -w",
     "build:tailwind": "NODE_ENV=production postcss static/tailwind.css -o static/index.css",
-    "build": "yarn run build:tailwind && sapper build ../build/frontend --legacy",
+    "build": "yarn run build:tailwind && sapper build --legacy",
     "dev": "concurrently --kill-others \"sapper dev --live\" \"postcss static/tailwind.css -o static/index.css -w\"",
     "export": "sapper export --legacy",
     "start": "node __sapper__/build",
