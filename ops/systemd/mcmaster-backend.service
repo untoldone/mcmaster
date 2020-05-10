@@ -9,9 +9,10 @@ Group=root
 Environment=USER_WHITELIST=
 Environment=MINECRAFT_CLIENT_TOKEN=
 Environment=HMAC_SECRET_KEY=
+Environment=MINECRAFT_DIRECTORY=
 
-WorkingDirectory=/opt/mcmaster/backend
-ExecStart=./mcmaster-backend
+WorkingDirectory=/opt/mcmaster
+ExecStart=/opt/mcmaster/mcmaster-backend -addr 0.0.0.0:5000
 
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process

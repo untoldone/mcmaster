@@ -1,8 +1,6 @@
 TODO:
-* Whitelist
-* Make deployable
-
-* Pull out env variables for secrets (jwt + minecraft client id)
+* Frontend configurable hostname locations
+* CORS configured correctly
 
 * General code cleanup
 
