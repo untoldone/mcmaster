@@ -24,10 +24,14 @@ type ServiceContext struct {
 }
 
 var whitelistedUsers []string
+var minecraftClientToken string
+var hmacSecretKey []byte
 
 func init() {
 	whitelist := os.Getenv("USER_WHITELIST")
 	whitelistedUsers = strings.Split(strings.ToLower(whitelist), ",")
+	minecraftClientToken = os.Getenv("MINECRAFT_CLIENT_TOKEN")
+	hmacSecretKey = []byte(os.Getenv("HMAC_SECRET_KEY"))
 }
 
 // checkSameOrigin returns true if the origin is not set or is equal to the request host.
@@ -146,8 +150,6 @@ func connect(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var hmacSampleSecret = []byte("my_secret_key")
-
 func addCorsHeader(res http.ResponseWriter) {
 	headers := res.Header()
 	headers.Add("Access-Control-Allow-Origin", "*")
@@ -183,7 +185,7 @@ func auth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check minecraft username / password
-	yggdrasilClient := &yggdrasil.Client{ClientToken: "your client token here"}
+	yggdrasilClient := &yggdrasil.Client{ClientToken: minecraftClientToken}
 	_, yErr := yggdrasilClient.Authenticate(pair[0], pair[1], "Minecraft", 1)
 	if yErr != nil {
 		http.Error(w, fmt.Sprintf("authorization failed: %s", yErr), http.StatusUnauthorized)
@@ -210,7 +212,7 @@ func auth(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
-	tokenString, err := token.SignedString(hmacSampleSecret)
+	tokenString, err := token.SignedString(hmacSecretKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 	}
@@ -230,8 +232,7 @@ func validateJwt(tokenString string) string {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
 
-		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
-		return hmacSampleSecret, nil
+		return hmacSecretKey, nil
 	})
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {

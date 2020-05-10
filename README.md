@@ -22,3 +22,5 @@ Configuration:
 Set environment variables to configure McMaster.
 
 * USER_WHITELIST: Comma delimited list of minecraft email addresses allowed to log in
+* MINECRAFT_CLIENT_TOKEN: Identifier token to the Minecraft authentication server. Can be anything you want
+* HMAC_SECRET_KEY: Secret key used to create and verify JWT based client tokens. Keep this safe
