@@ -7,6 +7,11 @@ function cleanup {
 
 set -e
 
+if [[ -f "$(pwd)/.env" ]]; then
+  echo "SOURCING"
+  source $(pwd)/.env
+fi
+
 trap cleanup SIGHUP SIGINT SIGTERM
 
 cd $(pwd)/frontend

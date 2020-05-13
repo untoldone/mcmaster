@@ -28,6 +28,7 @@ var minecraftClientToken string
 var hmacSecretKey []byte
 
 func init() {
+	fmt.Println(os.Getenv("USER_WHITELIST"))
 	whitelist := os.Getenv("USER_WHITELIST")
 	whitelistedUsers = strings.Split(strings.ToLower(whitelist), ",")
 	minecraftClientToken = os.Getenv("MINECRAFT_CLIENT_TOKEN")
@@ -186,17 +187,28 @@ func auth(w http.ResponseWriter, r *http.Request) {
 
 	// Check minecraft username / password
 	yggdrasilClient := &yggdrasil.Client{ClientToken: minecraftClientToken}
-	_, yErr := yggdrasilClient.Authenticate(pair[0], pair[1], "Minecraft", 1)
+	authResp, yErr := yggdrasilClient.Authenticate(pair[0], pair[1], "Minecraft", 1)
 	if yErr != nil {
 		http.Error(w, fmt.Sprintf("authorization failed: %s", yErr), http.StatusUnauthorized)
 		return
 	}
 
+	fmt.Println(authResp)
+
+	fmt.Println("===")
+
+	fmt.Println(authResp.AvailableProfiles)
+	fmt.Println("===")
+
+	fmt.Println(whitelistedUsers)
+
 	// Check user in whitelist
 	whitelisted := false
 	for _, whitelistedUser := range whitelistedUsers {
-		if whitelistedUser == strings.ToLower(pair[0]) {
-			whitelisted = true
+		for _, profile := range authResp.AvailableProfiles {
+			if whitelistedUser == strings.ToLower(profile.Name) {
+				whitelisted = true
+			}
 		}
 	}
 	if !whitelisted {
