@@ -21,7 +21,7 @@ YARN_PID=$!
 
 cd ../backend
 
-go run . &
+./dev-run.sh &
 GO_PID=$!
 
 wait $GO_PID
